@@ -1,0 +1,12 @@
+.feedback-body{background:#17191e!important;color:#edf0f5!important;color-scheme:dark}
+.feedback-editor{height:100vh;width:100vw;overflow:hidden;--hover:#343943;--accent:#6fa5ff}
+.feedback-canvas{position:absolute;inset:0;width:100%;height:100%;touch-action:none;cursor:crosshair}
+.feedback-toolbar,.feedback-composer{position:absolute;background:#20242cf5;border:1px solid #454b56;box-shadow:0 8px 32px #0006;border-radius:14px;color:#edf0f5;backdrop-filter:blur(12px)}
+.feedback-toolbar{top:18px;left:50%;transform:translateX(-50%);display:flex;align-items:center;padding:7px;gap:3px;max-width:calc(100vw - 32px)}
+.feedback-title{display:flex;align-items:center;gap:9px;padding:0 12px;font-size:13px;white-space:nowrap}.feedback-title svg{color:#aab5c7}.feedback-title b{font-weight:550}
+.feedback-toolbar button{display:flex;align-items:center;justify-content:center;width:35px;height:35px;background:transparent;border:0;border-radius:8px;color:#c6ccd8}.feedback-toolbar button.selected{background:#394658;color:#fff}.feedback-toolbar button.selected svg{stroke:#8dbbff}.feedback-separator{height:22px;width:1px;background:#444a55;margin:0 5px}
+.feedback-composer{bottom:22px;left:50%;transform:translateX(-50%);width:min(650px,calc(100vw - 32px));padding:16px}
+.feedback-heading{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:10px}.feedback-heading label{font-size:14px;font-weight:600}.feedback-heading>span{color:#a0acbd;font-size:11px}
+.feedback-composer textarea{display:block;width:100%;height:74px;min-height:60px;max-height:30vh;resize:vertical;background:#181c23;border:1px solid #424a58;border-radius:9px;color:#f1f4f8;padding:10px 12px;font-size:13px;line-height:1.5}.feedback-composer textarea::placeholder{color:#8993a3}.feedback-composer textarea:focus-visible{outline:2px solid #6fa5ff;outline-offset:2px}
+.feedback-footer{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-top:12px}.feedback-footer>span{color:#a2acbb;font-size:11px;line-height:1.4}.feedback-footer button{display:flex;align-items:center;justify-content:center;gap:8px;flex-shrink:0;background:#5f95ed;border:1px solid #7baaff;color:#fff;border-radius:9px;padding:10px 13px;font-size:12px;font-weight:550}.feedback-footer button:hover:not(:disabled){background:#73a5f4}.feedback-error{color:#ff9d9d;font-size:12px;line-height:1.4;margin-top:10px}
+@media(max-width:580px){.feedback-title{padding:0 5px}.feedback-title b{display:none}.feedback-footer{align-items:flex-end}.feedback-footer>span{max-width:150px}}

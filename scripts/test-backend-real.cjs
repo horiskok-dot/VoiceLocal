@@ -1,0 +1,20 @@
+const fs=require('node:fs');const os=require('node:os');const path=require('node:path');const assert=require('node:assert/strict');const zlib=require('node:zlib');
+const {Models}=require('../electron/models.cjs');const {Native}=require('../electron/native.cjs');
+function png(){function crc(b){let c=0xffffffff;for(const n of b){c^=n;for(let j=0;j<8;j++)c=(c>>>1)^((c&1)?0xedb88320:0);}return(c^0xffffffff)>>>0;}function chunk(type,data){const b=Buffer.concat([Buffer.from(type),data]);const n=Buffer.alloc(4),c=Buffer.alloc(4);n.writeUInt32BE(data.length);c.writeUInt32BE(crc(b));return Buffer.concat([n,b,c]);}const header=Buffer.alloc(13);header.writeUInt32BE(256,0);header.writeUInt32BE(256,4);header[8]=8;header[9]=2;const pixels=Buffer.alloc(256*769);for(let y=0;y<256;y++)for(let x=0;x<256;x++)pixels[y*769+1+x*3]=240;return Buffer.concat([Buffer.from([137,80,78,71,13,10,26,10]),chunk('IHDR',header),chunk('IDAT',zlib.deflateSync(pixels)),chunk('IEND',Buffer.alloc(0))]);}
+(async()=>{const root=path.resolve(__dirname,'../runtime'),temp=fs.mkdtempSync(path.join(os.tmpdir(),'voice-real-'));const models=new Models(root,()=>({gpuLayers:99}),(type,status)=>console.log(type,status.state,status.device,status.error.slice(0,150)));let native;
+const deadline=setTimeout(()=>{console.error('SMOKE timeout');models.stop();native?.stop();process.exitCode=1;},240000);
+try{
+  native=new Native(path.join(root,'native','VoiceNative.exe'));native.on('failure',x=>console.error('NATIVE failure',x));await new Promise((r,j)=>{native.once('ready',x=>{console.log('NATIVE_READY',x);r();});native.once('failure',j);});
+  const devices=await native.call('devices'),voices=await native.call('voices');console.log('NATIVE_DEVICES',JSON.stringify(devices));console.log('NATIVE_VOICES',JSON.stringify(voices));
+  const invalid=await native.call('recordStart',{path:path.join(temp,'invalid.wav'),deviceId:9999}).then(()=>null,e=>e.message);assert.ok(invalid);console.log('NATIVE_INVALID_DEVICE',invalid);
+  if(devices.length){const stopEvent=new Promise(r=>native.once('recordingStopped',r));await native.call('recordStart',{path:path.join(temp,'mic.wav'),deviceId:devices[0].id});await new Promise(r=>setTimeout(r,350));await native.call('recordStop');const recorded=await stopEvent;assert.ok(!recorded.error&&fs.statSync(recorded.path).size>44);console.log('NATIVE_RECORD',JSON.stringify(recorded));}
+  native.stop();native=null;
+  const response=await fetch('https://raw.githubusercontent.com/ggml-org/whisper.cpp/master/samples/jfk.wav');assert.ok(response.ok);const audio=path.join(temp,'jfk.wav');fs.writeFileSync(audio,Buffer.from(await response.arrayBuffer()));
+  const raw=await models.transcribe(audio,'en');console.log('WHISPER_RESULT',raw);assert.match(raw,/ask not what your country/i);
+  await models.ensure();console.log('MODEL_READY',JSON.stringify(models.status()));
+  const chat=await models.chat([{role:'user',content:'What is 2 + 2? Answer with just the number.'}],{maxTokens:32,signal:AbortSignal.timeout(60000)});console.log('CHAT_RESULT',JSON.stringify(chat));assert.match(chat.content,/4/);
+  const tools=[{type:'function',function:{name:'get_time',description:'Get current time. Always call this when asked for current time.',parameters:{type:'object',properties:{},required:[],additionalProperties:false}}}];
+  const tool=await models.chat([{role:'user',content:'Use get_time to tell me the exact current time.'}],{tools,maxTokens:128,signal:AbortSignal.timeout(60000)});console.log('TOOL_RESULT',JSON.stringify(tool));assert.equal(tool.tool_calls?.[0]?.function.name,'get_time');
+  const vision=await models.chat([{role:'user',content:[{type:'text',text:'What color fills this image? Answer one color word.'},{type:'image_url',image_url:{url:'data:image/png;base64,'+png().toString('base64')}}]}],{maxTokens:32,signal:AbortSignal.timeout(60000)});console.log('VISION_RESULT',JSON.stringify(vision));assert.match(vision.content,/red/i);
+  console.log('REAL_SMOKE_PASS');
+}finally{clearTimeout(deadline);models.stop();native?.stop();fs.rmSync(temp,{recursive:true,force:true});}})().catch(e=>{console.error(e.stack||e);process.exitCode=1;});

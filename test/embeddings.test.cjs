@@ -1,0 +1,10 @@
+const test=require('node:test');
+const assert=require('node:assert/strict');
+const fs=require('node:fs');
+const os=require('node:os');
+const path=require('node:path');
+const {Embeddings}=require('../electron/embeddings.cjs');
+function runtime(t){const dir=fs.mkdtempSync(path.join(os.tmpdir(),'voice-compact-'));t.after(()=>{assert.equal(path.dirname(dir),os.tmpdir());fs.rmSync(dir,{recursive:true,force:true});});fs.mkdirSync(path.join(dir,'llama'));fs.mkdirSync(path.join(dir,'models'));fs.writeFileSync(path.join(dir,'llama/llama-server.exe'),'');fs.writeFileSync(path.join(dir,'models/embedding.gguf'),'GGUF');const config={format:'gguf',model:'models/embedding.gguf',sha256:'test-model'};fs.writeFileSync(path.join(dir,'embedding-config.json'),JSON.stringify(config));return{dir,config,e:new Embeddings(dir),save:c=>fs.writeFileSync(path.join(dir,'embedding-config.json'),JSON.stringify(c))};}
+test('compact embedding config is portable and its hash fingerprints the search index',t=>{const h=runtime(t);assert.equal(h.e.config().model,path.join(h.dir,'models/embedding.gguf'));assert.equal(h.e.status().bytes,4);const first=h.e.identity();h.save({...h.config,sha256:'different-quantization'});assert.notEqual(h.e.identity(),first);assert.match(h.e.identity(),/gguf:.*:768:mean/);});
+test('compact embedding refuses old Python configurations, escaped paths and files over 500MB',t=>{const h=runtime(t);h.save({...h.config,format:'python'});assert.throws(()=>h.e.config(),/500/);h.save({...h.config,model:'../outside.gguf'});assert.throws(()=>h.e.config(),/500/);h.save(h.config);const fd=fs.openSync(path.join(h.dir,'models/embedding.gguf'),'w');fs.ftruncateSync(fd,500000001);fs.closeSync(fd);assert.throws(()=>h.e.config(),/500/);});
+test('empty and already aborted embedding requests never start a model process',async t=>{const h=runtime(t);assert.deepEqual(await h.e.embed([]),[]);const c=new AbortController();c.abort();await assert.rejects(h.e.embed(['query'],{signal:c.signal}),{name:'AbortError'});assert.equal(h.e.proc,null);assert.equal(h.e.state,'stopped');});

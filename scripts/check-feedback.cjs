@@ -1,0 +1,23 @@
+const fs=require('node:fs'),path=require('node:path'),assert=require('node:assert/strict');
+const {chromium,_electron}=require('playwright');
+const {Store}=require('../electron/store.cjs');
+const root=path.resolve(__dirname,'..'),out=path.join(root,'test-output');fs.mkdirSync(out,{recursive:true});
+(async()=>{let browser,app;try{
+  browser=await chromium.launch({channel:'msedge',headless:true,args:['--allow-file-access-from-files']});const page=await browser.newPage({viewport:{width:1280,height:800}});
+  const image=await page.evaluate(()=>{const c=document.createElement('canvas');c.width=1280;c.height=800;const x=c.getContext('2d');x.fillStyle='#e9edf3';x.fillRect(0,0,1280,800);x.fillStyle='#20242c';x.fillRect(230,170,820,390);x.fillStyle='#fff';x.font='28px Segoe UI';x.fillText('Voice Local',280,230);x.font='18px Segoe UI';x.fillText('Example button does not open a file',300,340);return c.toDataURL();});
+  await page.addInitScript(image=>{window.__fail=true;window.voice={feedbackCapture:async()=>({image,connected:true}),closeFeedback:async()=>{},sendFeedback:async payload=>{if(window.__fail)throw Error('Тест: Codex недоступен');window.__sent=payload;return{sent:true};}};},image);
+  await page.goto('file:///'+path.join(root,'dist/index.html').replace(/\\/g,'/')+'#feedback');await page.waitForFunction(()=>document.querySelector('canvas')?.width===1280);
+  await page.mouse.move(280,270);await page.mouse.down();await page.mouse.move(670,410,{steps:8});await page.mouse.up();
+  const red=await page.evaluate(()=>[...document.querySelector('canvas').getContext('2d').getImageData(475,270,1,1).data]);assert(red[0]>240&&red[1]<100);
+  await page.getByRole('button',{name:'Отменить отметку',exact:true}).click();await page.mouse.move(280,270);await page.mouse.down();await page.mouse.move(670,410,{steps:8});await page.mouse.up();
+  await page.getByRole('button',{name:'Скрыть область',exact:true}).click();await page.mouse.move(900,250);await page.mouse.down();await page.mouse.move(1000,350,{steps:5});await page.mouse.up();
+  const black=await page.evaluate(()=>[...document.querySelector('canvas').getContext('2d').getImageData(950,300,1,1).data]);assert.equal(black[0],17);
+  await page.getByLabel('Что исправить?').fill('Исправь выделенную кнопку, она не открывает файл.');await page.screenshot({path:path.join(out,'feedback-editor.png')});
+  await page.getByRole('button',{name:'Отправить в Codex',exact:true}).click();await page.getByRole('alert').filter({hasText:'Codex недоступен'}).waitFor();assert.equal(await page.getByLabel('Что исправить?').inputValue(),'Исправь выделенную кнопку, она не открывает файл.');
+  await page.evaluate(()=>window.__fail=false);await page.getByRole('button',{name:'Отправить в Codex',exact:true}).click();const sent=await page.evaluate(()=>window.__sent);assert(sent.image.startsWith('data:image/png;base64,'));assert.match(sent.description,/выделенную кнопку/);
+  fs.writeFileSync(path.join(out,'feedback-annotation.png'),Buffer.from(sent.image.split(',')[1],'base64'));console.log('ANNOTATION_UNDO_REDACTION_RETRY_PASS');await browser.close();browser=null;
+  const profile=path.join(out,'feedback-profile');new Store(profile).settings({showNotch:false,sounds:false,modelPath:path.join(profile,'missing.gguf'),speechModelPath:path.join(profile,'missing.bin')});
+  const env={...process.env,VOICE_LOCAL_DATA:profile};delete env.ELECTRON_RUN_AS_NODE;delete env.VOICE_LOCAL_DEV;
+  app=await _electron.launch({executablePath:path.join(root,'node_modules/electron/dist/electron.exe'),args:[root],env,timeout:30000});const main=await app.firstWindow();await main.waitForFunction(()=>!!window.voice);await main.evaluate(()=>window.voice.startFeedback());
+  const editor=await app.waitForEvent('window',{predicate:w=>w.url().includes('#feedback'),timeout:15000}).catch(()=>app.windows().find(w=>w.url().includes('#feedback')));assert(editor);await editor.waitForFunction(()=>document.querySelector('canvas')?.width>300);const capture=await editor.evaluate(()=>window.voice.feedbackCapture());assert(capture.image.startsWith('data:image/png;base64,'));await editor.evaluate(()=>window.voice.closeFeedback());console.log('REAL_DESKTOP_CAPTURE_AND_CLOSE_PASS');
+}finally{if(browser)await browser.close();if(app)await app.close();}})().catch(e=>{console.error(e);process.exitCode=1;});

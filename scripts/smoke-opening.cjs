@@ -1,0 +1,22 @@
+const fs=require('node:fs'),path=require('node:path'),assert=require('node:assert/strict'),{execFileSync}=require('node:child_process');
+const {_electron}=require('playwright');
+const {Store}=require('../electron/store.cjs');
+const root=path.resolve(__dirname,'..'),stamp=Date.now(),profile=path.join(root,'test-output','opening-'+stamp),docs=path.join(root,'test-output','opening-fixtures-'+stamp);
+fs.mkdirSync(docs,{recursive:true});fs.writeFileSync(path.join(docs,'счёт-один.txt'),'Первый счёт');fs.writeFileSync(path.join(docs,'счёт-два.txt'),'Второй счёт');
+new Store(profile).settings({searchRoots:[docs],searchInitialized:true,agentShortcut:'Control+Shift+F10',dictationShortcut:'Control+Shift+F9',pasteShortcut:'Control+Alt+F9',speakReplies:false,showPill:false,showNotch:false,sounds:false});
+const env={...process.env,VOICE_LOCAL_DATA:profile};delete env.ELECTRON_RUN_AS_NODE;delete env.VOICE_LOCAL_DEV;
+const calculators=()=>{try{return String(execFileSync('powershell.exe',['-NoProfile','-NonInteractive','-Command',"Get-Process | Where-Object {$_.ProcessName -in @('CalculatorApp','Calculator')} | Select-Object -ExpandProperty Id"],{windowsHide:true,encoding:'utf8'})).trim().split(/\s+/).filter(Boolean);}catch{return[];}};
+(async()=>{let app;const before=calculators();try{
+ app=await _electron.launch({executablePath:process.env.VOICE_OPEN_PACKAGED||path.join(root,'node_modules/electron/dist/electron.exe'),args:process.env.VOICE_OPEN_PACKAGED?[]:[root],cwd:root,env,timeout:30000});
+ let page;for(let i=0;i<100;i++){page=app.windows().find(p=>p.url().includes('index.html')&&!/#pill|#notch/.test(p.url()));if(page)break;await new Promise(r=>setTimeout(r,100));}assert(page);await app.evaluate(({BrowserWindow})=>BrowserWindow.getAllWindows().forEach(w=>w.hide()));
+ await app.evaluate(({shell})=>{global.__opens=[];shell.openPath=async p=>{global.__opens.push(p);return '';};});
+ const found=await page.evaluate(()=>window.voice.searchFiles('счёт'));assert.equal(found.length,2);
+ await page.evaluate(()=>window.voice.agent({text:'Открой второй',voice:true}));assert.deepEqual(await app.evaluate(()=>global.__opens),[found[1].path]);assert.equal(await page.locator('.confirmation-card').count(),0);console.log('MANUAL_SEARCH_THEN_OPEN_SECOND_PASS');
+ await page.evaluate(()=>window.voice.agent({text:'Найди калькулятор',voice:true}));const b=await page.evaluate(()=>window.voice.bootstrap());assert.equal(b.data.threads[0].messages.at(-2).content,'search_apps');
+ await page.evaluate(()=>window.voice.agent({text:'Открой первый',voice:true}));const after=await page.evaluate(()=>window.voice.bootstrap());assert.match(after.data.threads[0].messages.at(-1).content,/Открыл.*Калькулятор/);
+ for(let i=0;i<30&&!calculators().length;i++)await new Promise(r=>setTimeout(r,150));assert(calculators().length>0);console.log('REAL_WINDOWS_CALCULATOR_OPEN_PASS');
+ const threadId=after.data.threads[0].id;await page.evaluate(id=>window.voice.agent({threadId:id,text:'Найди файлы со словом счёт через search_files.',voice:true}),threadId);
+ const list=(await page.evaluate(()=>window.voice.bootstrap())).data.threads[0].messages.filter(x=>x.content==='search_files'&&!x.error).at(-1)?.result?.files;assert(list?.length>=2);
+ await page.evaluate(()=>window.voice.agent({text:'Открой второй файл',voice:true}));assert.equal((await app.evaluate(()=>global.__opens)).at(-1),list[1].path);console.log('VOICE_FIND_THEN_OPEN_NUMBER_PASS');
+ fs.writeFileSync(path.join(root,'test-output/opening-result.json'),JSON.stringify({passed:true,packaged:!!process.env.VOICE_OPEN_PACKAGED,fileSecond:true,calculator:true,voiceFind:true},null,2));
+}finally{if(app){await app.evaluate(({app})=>app.quit()).catch(()=>{});await app.close().catch(()=>{});}for(const id of calculators().filter(id=>!before.includes(id))){try{execFileSync('powershell.exe',['-NoProfile','-NonInteractive','-Command',`Stop-Process -Id ${Number(id)} -ErrorAction SilentlyContinue`],{windowsHide:true,stdio:'ignore'});}catch{}}}})().catch(e=>{console.error(e.stack||e);process.exitCode=1;});

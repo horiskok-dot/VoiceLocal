@@ -1,0 +1,15 @@
+node_modules/
+dist/
+release/
+release-*/
+runtime/
+test-output/
+**/bin/
+**/obj/
+electron/graphify-out/
+*.pdb
+*.log
+.env
+.env.*
+codex-connection.json
+reports/

@@ -1,0 +1,75 @@
+{
+  "name": "voice-local",
+  "productName": "Voice Local",
+  "version": "1.0.12",
+  "description": "Локальный голосовой помощник для Windows",
+  "main": "electron/main.cjs",
+  "private": true,
+  "author": "Voice Local project",
+  "license": "UNLICENSED",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1",
+    "build": "vite build",
+    "start": "electron .",
+    "models": "node scripts/install-models.cjs",
+    "build-asr": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-asr.ps1",
+    "package": "npm run build && electron-builder --win dir",
+    "test": "node --test test/*.test.cjs",
+    "configure-search": "node scripts/configure-embeddings.cjs"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.28.0",
+    "lucide-react": "^0.468.0",
+    "mammoth": "^1.13.0",
+    "pdf-parse": "^2.4.5",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "devDependencies": {
+    "electron": "^41.0.0",
+    "electron-builder": "^26.0.0",
+    "playwright": "^1.64.1",
+    "vite": "^7.0.0"
+  },
+  "build": {
+    "appId": "local.voice.desktop",
+    "productName": "Voice Local",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "electron/**/*",
+      "!electron/graphify-out/**/*",
+      "package.json",
+      "README.md",
+      "THIRD_PARTY_NOTICES.md"
+    ],
+    "extraResources": [
+      {
+        "from": "runtime",
+        "to": "runtime",
+        "filter": [
+          "**/*",
+          "!*.zip",
+          "!**/*.pdb",
+          "!models/ggml-large-v3-turbo-q5_0.bin",
+          "!models/ggml-medium-q5_0.bin"
+        ]
+      },
+      {
+        "from": "THIRD_PARTY_NOTICES.md",
+        "to": "THIRD_PARTY_NOTICES.md"
+      },
+      {
+        "from": "README.md",
+        "to": "README.md"
+      }
+    ],
+    "win": {
+      "target": "dir",
+      "icon": "public/icon.ico",
+      "signExecutable": false
+    }
+  }
+}
